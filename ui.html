@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Instances Cassées</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background-color: #f9f9f9;
+      color: #333;
+    }
+    h3 {
+      font-size: 20px;
+      margin: 0 0 10px;
+      color: #4a90e2;
+    }
+    p {
+      margin: 5px 0 10px;
+      font-size: 14px;
+    }
+    button {
+      display: inline-block;
+      padding: 10px 20px;
+      font-size: 14px;
+      color: #fff;
+      background-color: #4a90e2;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #357ab8;
+    }
+    ul {
+      list-style-type: none;
+      padding: 0;
+      margin-top: 15px;
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      background-color: #fff;
+      border-radius: 4px;
+    }
+    li {
+      margin: 5px;
+      padding: 10px;
+      border-bottom: 1px solid #ddd;
+      cursor: pointer;
+    }
+    li:hover {
+      background-color: #e6f0ff;
+    }
+    li:last-child {
+      border-bottom: none;
+    }
+    .instance-id {
+      font-size: 12px;
+      color: #999;
+    }
+  </style>
+</head>
+<body>
+  <h3>Analyse des Instances</h3>
+  <p id="status">Recherche en cours...</p>
+  <p id="scope">Scan en cours : Page active</p>
+  <button id="rescan">Relancer le scan</button>
+  <ul id="list"></ul>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const scopeEl = document.getElementById('scope');
+    const listEl = document.getElementById('list');
+    const rescanButton = document.getElementById('rescan');
+
+    // Mise à jour des résultats du scan
+    window.onmessage = (event) => {
+      const { type, instances, scope } = event.data.pluginMessage;
+
+      if (type === 'scanComplete') {
+        scopeEl.textContent = `Scan en cours : ${scope === 'page' ? 'Page active' : 'Hiérarchie sélectionnée'}`;
+
+        if (instances.length > 0) {
+          statusEl.textContent = 'Voici les instances cassées :';
+          listEl.innerHTML = instances
+            .map(inst => `
+              <li data-node-id="${inst.id}">
+                <strong>${inst.name}</strong>
+                <div class="instance-id">ID : ${inst.id}</div>
+              </li>
+            `)
+            .join('');
+        } else {
+          statusEl.textContent = 'Aucune instance cassée trouvée.';
+          listEl.innerHTML = '';
+        }
+      } else if (type === 'updateScope') {
+        scopeEl.textContent = `Scan en cours : ${scope === 'page' ? 'Page active' : 'Hiérarchie sélectionnée'}`;
+      }
+    };
+
+    // Relancer le scan
+    rescanButton.addEventListener('click', () => {
+      parent.postMessage({ pluginMessage: { type: 'runScan' } }, '*');
+      statusEl.textContent = 'Recherche en cours...';
+      listEl.innerHTML = '';
+    });
+
+    // Gestion des clics sur les éléments
+    listEl.addEventListener('click', (event) => {
+      const target = event.target.closest('li[data-node-id]');
+      if (target) {
+        const nodeId = target.getAttribute('data-node-id');
+        parent.postMessage({ pluginMessage: { type: 'focusOnInstance', nodeId } }, '*');
+      }
+    });
+  </script>
+</body>
+</html>
