@@ -28,9 +28,26 @@
       border: none;
       border-radius: 4px;
       cursor: pointer;
+      margin-right: 10px;
     }
     button:hover {
       background-color: #357ab8;
+    }
+    .toggle-container {
+      margin: 15px 0;
+      padding: 10px;
+      background-color: #fff;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+    .toggle-container label {
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .toggle-container input[type="checkbox"] {
+      margin-right: 8px;
     }
     ul {
       list-style-type: none;
@@ -47,24 +64,105 @@
       padding: 10px;
       border-bottom: 1px solid #ddd;
       cursor: pointer;
+      position: relative;
     }
-    li:hover {
-      background-color: #e6f0ff;
+
+    li.broken {
+      background-color: #ffe6e6;
+      border-left: 4px solid #ff4444;
     }
-    li:last-child {
-      border-bottom: none;
+    li.broken:hover {
+      background-color: #ffcccc;
     }
-    .instance-id {
+
+    li.valid {
+      background-color: #e6f7e6;
+      border-left: 4px solid #22aa22;
+    }
+    li.valid:hover {
+      background-color: #cceecc;
+    }
+    li.valid.hidden {
+      display: none;
+    }
+    .instance-reason {
       font-size: 12px;
-      color: #999;
+      color: #888;
+      font-style: italic;
+      margin-top: 5px;
+    }
+    .detection-method {
+      font-size: 11px;
+      color: #666;
+      background-color: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-top: 5px;
+      font-family: 'Courier New', monospace;
+    }
+    .status-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+    .status-badge.broken {
+      background-color: #ff4444;
+      color: white;
+    }
+    .status-badge.valid {
+      background-color: #22aa22;
+      color: white;
+    }
+    .action-buttons {
+      margin-top: 8px;
+      display: flex;
+      gap: 5px;
+    }
+    .action-btn {
+      padding: 4px 8px;
+      font-size: 11px;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      color: white;
+    }
+    .focus-btn {
+      background-color: #4a90e2;
+    }
+    .focus-btn:hover {
+      background-color: #357ab8;
+    }
+    .parent-btn {
+      background-color: #ff8800;
+    }
+    .parent-btn:hover {
+      background-color: #e67700;
+    }
+    .parent-btn:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
     }
   </style>
 </head>
 <body>
   <h3>Analyse des Instances</h3>
-  <p id="status">Recherche en cours...</p>
   <p id="scope">Scan en cours : Page active</p>
+  
   <button id="rescan">Relancer le scan</button>
+  
+  <div class="toggle-container">
+    <label>
+      <input type="checkbox" id="showValid" checked>
+      Afficher les instances valides
+    </label>
+  </div>
+  
+  <p id="status">Cliquez sur "Relancer le scan" pour commencer.</p>
   <ul id="list"></ul>
 
   <script>
@@ -72,26 +170,70 @@
     const scopeEl = document.getElementById('scope');
     const listEl = document.getElementById('list');
     const rescanButton = document.getElementById('rescan');
+    const showValidCheckbox = document.getElementById('showValid');
 
-    // Mise à jour des résultats du scan
+    let currentInstances = [];
+
+    function updateDisplay() {
+      const showValid = showValidCheckbox.checked;
+      const listItems = listEl.querySelectorAll('li');
+      
+      listItems.forEach(item => {
+        const isValid = item.classList.contains('valid');
+        if (isValid && !showValid) {
+          item.classList.add('hidden');
+        } else {
+          item.classList.remove('hidden');
+        }
+      });
+      
+      const visibleBroken = currentInstances.filter(inst => inst.isBroken).length;
+      const visibleValid = showValid ? currentInstances.filter(inst => !inst.isBroken).length : 0;
+      const totalVisible = visibleBroken + visibleValid;
+      
+      if (totalVisible === 0) {
+        statusEl.textContent = 'Aucune instance à afficher avec les filtres actuels.';
+      } else {
+        statusEl.textContent = `${visibleBroken} cassée(s), ${visibleValid} valide(s) affichée(s)`;
+      }
+    }
+
+    showValidCheckbox.addEventListener('change', updateDisplay);
+
     window.onmessage = (event) => {
       const { type, instances, scope } = event.data.pluginMessage;
 
       if (type === 'scanComplete') {
         scopeEl.textContent = `Scan en cours : ${scope === 'page' ? 'Page active' : 'Hiérarchie sélectionnée'}`;
+        currentInstances = instances || [];
 
         if (instances.length > 0) {
-          statusEl.textContent = 'Voici les instances cassées :';
           listEl.innerHTML = instances
             .map(inst => `
-              <li data-node-id="${inst.id}">
+              <li data-node-id="${inst.id}" class="${inst.isBroken ? 'broken' : 'valid'}">
+                <div class="status-badge ${inst.isBroken ? 'broken' : 'valid'}">
+                  ${inst.isBroken ? 'Cassée' : 'Valide'}
+                </div>
                 <strong>${inst.name}</strong>
                 <div class="instance-id">ID : ${inst.id}</div>
+                ${inst.reason ? `<div class="instance-reason">Raison : ${inst.reason}</div>` : ''}
+                ${inst.method ? `<div class="detection-method">Méthode : ${inst.method}</div>` : ''}
+                <div class="action-buttons">
+                  <button class="action-btn focus-btn" onclick="focusOnInstance('${inst.id}')">
+                    Aller à l'instance
+                  </button>
+                  ${inst.isBroken ? '' : `<button class="action-btn parent-btn" onclick="focusOnParent('${inst.parentId}')" 
+                          ${!inst.parentId ? 'disabled' : ''}>
+                    Aller au parent
+                  </button>`}
+                </div>
               </li>
             `)
             .join('');
+          
+          updateDisplay();
         } else {
-          statusEl.textContent = 'Aucune instance cassée trouvée.';
+          statusEl.textContent = 'Aucune instance trouvée.';
           listEl.innerHTML = '';
         }
       } else if (type === 'updateScope') {
@@ -99,21 +241,23 @@
       }
     };
 
-    // Relancer le scan
     rescanButton.addEventListener('click', () => {
       parent.postMessage({ pluginMessage: { type: 'runScan' } }, '*');
       statusEl.textContent = 'Recherche en cours...';
       listEl.innerHTML = '';
     });
 
-    // Gestion des clics sur les éléments
-    listEl.addEventListener('click', (event) => {
-      const target = event.target.closest('li[data-node-id]');
-      if (target) {
-        const nodeId = target.getAttribute('data-node-id');
-        parent.postMessage({ pluginMessage: { type: 'focusOnInstance', nodeId } }, '*');
+    function focusOnInstance(nodeId) {
+      parent.postMessage({ pluginMessage: { type: 'focusOnInstance', nodeId } }, '*');
+    }
+
+    function focusOnParent(parentId) {
+      if (parentId) {
+        parent.postMessage({ pluginMessage: { type: 'focusOnParent', parentId } }, '*');
       }
-    });
+    }
+
+    updateDisplay();
   </script>
 </body>
 </html>
